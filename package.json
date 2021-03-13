@@ -19,6 +19,7 @@
     "build-all": "cross-env NODE_ENV=ALL rollup -c",
     "b:umd": "cross-env NODE_ENV=UMD rollup -c",
     "b:miniprogram": "cross-env NODE_ENV=MINI rollup -c",
+    "b:wechat": "rm -rf dist && cross-env NODE_ENV=WECHAT rollup -c rollup.wechat.js",
     "b:all": "npm run b:types && npm run build-all",
     "clean": "lerna exec -- rm -rf dist && lerna clean",
     "doc": "typedoc --options tools/typedoc/typedoc.js"

@@ -74,26 +74,34 @@ export class WebGLRenderer implements HardwareRenderer {
     const webGLMode = option.webGLMode || WebGLMode.Auto;
     let gl: (WebGLRenderingContext & WebGLExtension) | WebGL2RenderingContext;
 
-    if (webGLMode == WebGLMode.Auto || webGLMode == WebGLMode.WebGL2) {
-      gl = webCanvas.getContext("webgl2", option);
-      if (!gl && webCanvas instanceof HTMLCanvasElement) {
-        gl = <WebGL2RenderingContext>webCanvas.getContext("experimental-webgl2", option);
-      }
-      this._isWebGL2 = true;
-    }
-
-    if (!gl) {
-      if (webGLMode == WebGLMode.Auto || webGLMode == WebGLMode.WebGL1) {
-        gl = <WebGLRenderingContext & WebGLExtension>webCanvas.getContext("webgl", option);
+    if (process.env.WECHAT) {
+      gl = <WebGLRenderingContext & WebGLExtension>webCanvas.getContext("webgl", option);
+    } else {
+      if (webGLMode == WebGLMode.Auto || webGLMode == WebGLMode.WebGL2) {
+        gl = webCanvas.getContext("webgl2", option);
         if (!gl && webCanvas instanceof HTMLCanvasElement) {
-          gl = <WebGLRenderingContext & WebGLExtension>webCanvas.getContext("experimental-webgl", option);
+          gl = <WebGL2RenderingContext>webCanvas.getContext("experimental-webgl2", option);
         }
-        this._isWebGL2 = false;
+        this._isWebGL2 = true;
+      }
+
+      if (!gl) {
+        if (webGLMode == WebGLMode.Auto || webGLMode == WebGLMode.WebGL1) {
+          gl = <WebGLRenderingContext & WebGLExtension>webCanvas.getContext("webgl", option);
+          if (!gl && webCanvas instanceof HTMLCanvasElement) {
+            gl = <WebGLRenderingContext & WebGLExtension>webCanvas.getContext("experimental-webgl", option);
+          }
+          this._isWebGL2 = false;
+        }
       }
     }
 
     if (!gl) {
       throw new Error("Get GL Context FAILED.");
+    }
+
+    if (process.env.WECHAT) {
+      window.initCanvas(webCanvas, gl);
     }
 
     this._gl = gl;

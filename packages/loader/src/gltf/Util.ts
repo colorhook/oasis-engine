@@ -178,9 +178,14 @@ export function getElementFormat(type: number, size: number): VertexElementForma
  */
 export function loadImageBuffer(imageBuffer: ArrayBuffer, type: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
-    const blob = new window.Blob([imageBuffer], { type });
     const img = new Image();
-    img.src = URL.createObjectURL(blob);
+    if (process.env.WECHAT) { 
+      const base64 = window.arrayBufferToBase64(imageBuffer);
+      img.src = `data:${type};base64,${base64}`;
+    } else {
+      const blob = new window.Blob([imageBuffer], { type });
+      img.src = URL.createObjectURL(blob);
+    }
 
     img.crossOrigin = "anonymous";
     img.onerror = function () {
