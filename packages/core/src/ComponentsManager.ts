@@ -5,11 +5,14 @@ import { Renderer } from "./Renderer";
 import { Script } from "./Script";
 import { ShaderMacroCollection } from "./shader/ShaderMacroCollection";
 import { RenderContext } from "./RenderPipeline/RenderContext";
+import { Vector3 } from "@oasis-engine/math";
 
 /**
  * The manager of the components.
  */
 export class ComponentsManager {
+  private static _tempVector = new Vector3();
+
   // Script
   private _onStartScripts: DisorderedArray<Script> = new DisorderedArray();
   private _onUpdateScripts: DisorderedArray<Script> = new DisorderedArray();
@@ -169,7 +172,14 @@ export class ComponentsManager {
         }
       }
 
+      element._distanceForSort = Vector3.distanceSquared(
+        element.bounds.getCenter(ComponentsManager._tempVector),
+        camera.entity.transform.worldPosition
+      );
+
       element._updateShaderData(context);
+
+      element._render(camera);
 
       // union camera global macro and renderer macro.
       ShaderMacroCollection.unionCollection(
@@ -177,8 +187,6 @@ export class ComponentsManager {
         element.shaderData._macroCollection,
         element._globalShaderMacro
       );
-
-      element._render(camera);
     }
   }
 

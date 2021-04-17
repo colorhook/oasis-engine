@@ -2,9 +2,10 @@ import { Vector2, Vector3, Vector4 } from "@oasis-engine/math";
 import { Logger } from "../base/Logger";
 import { Camera } from "../Camera";
 import { Engine } from "../Engine";
-import { HardwareRenderer } from "../HardwareRenderer";
 import { Material } from "../material/Material";
 import { Renderer } from "../Renderer";
+import { IHardwareRenderer } from "../renderingHardwareInterface/IHardwareRenderer";
+import { Texture } from "../texture";
 import { ShaderDataGroup } from "./enums/ShaderDataGroup";
 import { Shader } from "./Shader";
 import { ShaderData } from "./ShaderData";
@@ -123,7 +124,26 @@ export class ShaderProgram {
     if (textureUniforms) {
       for (let i = 0, n = textureUniforms.length; i < n; i++) {
         const uniform = textureUniforms[i];
-        uniform.applyFunc(uniform, properties[uniform.propertyId]);
+        const texture = properties[uniform.propertyId];
+        if (texture) {
+          uniform.applyFunc(uniform, texture);
+        } else {
+          uniform.applyFunc(uniform, uniform.textureDefault);
+        }
+      }
+    }
+  }
+
+  /**
+   * Upload ungroup texture shader data in shader uniform block.
+   */
+  uploadUngroupTextures(): void {
+    const textureUniforms = this.otherUniformBlock.textureUniforms;
+    // textureUniforms property maybe null if ShaderUniformBlock not contain any texture.
+    if (textureUniforms) {
+      for (let i = 0, n = textureUniforms.length; i < n; i++) {
+        const uniform = textureUniforms[i];
+        uniform.applyFunc(uniform, uniform.textureDefault);
       }
     }
   }
@@ -142,7 +162,7 @@ export class ShaderProgram {
    * @returns Whether the shader program is switched.
    */
   bind(): boolean {
-    const rhi: HardwareRenderer = this._engine._hardwareRenderer;
+    const rhi: IHardwareRenderer = this._engine._hardwareRenderer;
     if (rhi._currentBind !== this) {
       this._gl.useProgram(this._glProgram);
       rhi._currentBind = this;
@@ -162,7 +182,7 @@ export class ShaderProgram {
     this._glProgram && gl.deleteProgram(this._glProgram);
   }
 
-  private _groupingSubOtherUniforms(unifroms: ShaderUniform[], isTexture: boolean) {
+  private _groupingSubOtherUniforms(unifroms: ShaderUniform[], isTexture: boolean): void {
     for (let i = unifroms.length - 1; i >= 0; i--) {
       const uniform = unifroms[i];
       const group = Shader._getShaderPropertyGroup(uniform.name);
@@ -382,24 +402,34 @@ export class ShaderProgram {
           break;
         case gl.SAMPLER_2D:
         case gl.SAMPLER_CUBE:
+          const defaultTexture = type === gl.SAMPLER_2D ? this._engine._whiteTexture2D : this._engine._whiteTextureCube;
+
           isTexture = true;
           if (isArray) {
+            const defaultTextures = new Array<Texture>(size);
             const textureIndices = new Int32Array(size);
             const glTextureIndices = new Array<number>(size);
+
             for (let i = 0; i < size; i++) {
+              defaultTextures[i] = defaultTexture;
               textureIndices[i] = this._activeTextureUint;
               glTextureIndices[i] = gl.TEXTURE0 + this._activeTextureUint++;
             }
+            shaderUniform.textureDefault = defaultTextures;
             shaderUniform.textureIndex = glTextureIndices;
             shaderUniform.applyFunc = shaderUniform.uploadTextureArray;
             this.bind();
             gl.uniform1iv(location, textureIndices);
+            shaderUniform.uploadTextureArray(shaderUniform, defaultTextures);
           } else {
             const textureIndex = gl.TEXTURE0 + this._activeTextureUint;
+
+            shaderUniform.textureDefault = defaultTexture;
             shaderUniform.textureIndex = textureIndex;
             shaderUniform.applyFunc = shaderUniform.uploadTexture;
             this.bind();
             gl.uniform1i(location, this._activeTextureUint++);
+            shaderUniform.uploadTexture(shaderUniform, defaultTexture);
           }
           break;
       }

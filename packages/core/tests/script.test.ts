@@ -1,14 +1,12 @@
-import { Engine } from "../src/Engine";
+import { WebGLEngine } from "../../rhi-webgl/src/WebGLEngine";
 import { Component, Entity, Script } from "../src/index";
 
 describe("Script", () => {
-  const engine = new Engine({ width: 1024, height: 1024 }, { init: jest.fn(), canIUse: jest.fn() });
+  const engine = new WebGLEngine(document.createElement("canvas"));
   const scene = engine.sceneManager.activeScene;
   engine.run();
 
   beforeEach(() => {
-    (Entity as any)._entitys.length = 0;
-    (Entity as any)._entitys._elements.length = 0;
     scene.createRootEntity("root");
   });
 

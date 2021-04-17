@@ -1,3 +1,8 @@
+export { SystemInfo } from './SystemInfo';
+import "./BufferLoader";
+export { OrbitControl } from './OrbitControl';
+export { WebGLRenderer } from './WebGLRenderer';
+
 export let devicePixelRatio = 1;
 export let WebGLRenderingContext = undefined;
 export let WebGL2RenderingContext = undefined;
@@ -5,6 +10,7 @@ export let innerWidth = 0;
 export let innerHeight = 0;
 export let outerWidth = 0;
 export let outerHeight = 0;
+export let platform = undefined;
 
 try {
   const res = wx.getSystemInfoSync();
@@ -13,6 +19,7 @@ try {
   innerHeight = res.windowHeight;
   outerWidth = res.screenWidth;
   outerHeight = res.screenHeight;
+  platform = res.platform;
 } catch (err) {}
 
 
@@ -59,6 +66,7 @@ export const window = {
   WebGL2RenderingContext,
   base64ToArrayBuffer,
   arrayBufferToBase64,
+  platform,
   innerWidth,
   innerHeight,
   outerWidth,
@@ -71,3 +79,5 @@ export const window = {
   navigator,
   request,
 }
+
+

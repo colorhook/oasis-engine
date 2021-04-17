@@ -5,14 +5,18 @@ import { ComponentsManager } from "./ComponentsManager";
 import { EngineFeature } from "./EngineFeature";
 import { Entity } from "./Entity";
 import { FeatureManager } from "./FeatureManager";
-import { HardwareRenderer } from "./HardwareRenderer";
+import { IHardwareRenderer } from "./renderingHardwareInterface/IHardwareRenderer";
+import { ClassPool } from "./RenderPipeline/ClassPool";
+import { RenderContext } from "./RenderPipeline/RenderContext";
 import { RenderElement } from "./RenderPipeline/RenderElement";
+import { SpriteElement } from "./RenderPipeline/SpriteElement";
 import { Scene } from "./Scene";
 import { SceneManager } from "./SceneManager";
 import { Shader } from "./shader/Shader";
 import { ShaderPool } from "./shader/ShaderPool";
 import { ShaderProgramPool } from "./shader/ShaderProgramPool";
 import { RenderState } from "./shader/state/RenderState";
+import { Texture2D, TextureCubeFace, TextureCubeMap, TextureFormat } from "./texture";
 
 /** TODO: delete */
 const engineFeatureManager = new FeatureManager<EngineFeature>();
@@ -23,9 +27,16 @@ ShaderPool.init();
  */
 export class Engine extends EventDispatcher {
   _componentsManager: ComponentsManager = new ComponentsManager();
-  _hardwareRenderer: HardwareRenderer;
+  _hardwareRenderer: IHardwareRenderer;
   _lastRenderState: RenderState = new RenderState();
+  _renderElementPool: ClassPool<RenderElement> = new ClassPool(RenderElement);
+  _spriteElementPool: ClassPool<SpriteElement> = new ClassPool(SpriteElement);
+  _renderContext: RenderContext = new RenderContext();
 
+  /* @internal */
+  _whiteTexture2D: Texture2D;
+  /* @internal */
+  _whiteTextureCube: TextureCubeMap;
   /* @internal */
   _renderCount: number = 0;
   /* @internal */
@@ -125,19 +136,11 @@ export class Engine extends EventDispatcher {
   }
 
   /**
-   * Graphics API renderer.
-   * @deprecated
-   */
-  get renderhardware(): HardwareRenderer {
-    return this._hardwareRenderer;
-  }
-
-  /**
    * Create engine.
    * @param canvas - The canvas to use for rendering
    * @param hardwareRenderer - Graphics API renderer
    */
-  constructor(canvas: Canvas, hardwareRenderer: HardwareRenderer) {
+  constructor(canvas: Canvas, hardwareRenderer: IHardwareRenderer) {
     super(null);
     this._hardwareRenderer = hardwareRenderer;
     this._hardwareRenderer.init(canvas);
@@ -145,6 +148,22 @@ export class Engine extends EventDispatcher {
     // @todo delete
     engineFeatureManager.addObject(this);
     this._sceneManager.activeScene = new Scene(this, "DefaultScene");
+
+    const whitePixel = new Uint8Array([255, 255, 255, 255]);
+
+    const whiteTextrue2D = new Texture2D(this, 1, 1, TextureFormat.R8G8B8A8, false);
+    whiteTextrue2D.setPixelBuffer(whitePixel);
+
+    const whiteTextrueCube = new TextureCubeMap(this, 1, TextureFormat.R8G8B8A8, false);
+    whiteTextrueCube.setPixelBuffer(TextureCubeFace.PositiveX, whitePixel);
+    whiteTextrueCube.setPixelBuffer(TextureCubeFace.NegativeX, whitePixel);
+    whiteTextrueCube.setPixelBuffer(TextureCubeFace.PositiveY, whitePixel);
+    whiteTextrueCube.setPixelBuffer(TextureCubeFace.NegativeY, whitePixel);
+    whiteTextrueCube.setPixelBuffer(TextureCubeFace.PositiveZ, whitePixel);
+    whiteTextrueCube.setPixelBuffer(TextureCubeFace.NegativeZ, whitePixel);
+
+    this._whiteTexture2D = whiteTextrue2D;
+    this._whiteTextureCube = whiteTextrueCube;
   }
 
   /**
@@ -183,7 +202,8 @@ export class Engine extends EventDispatcher {
     const deltaTime = time.deltaTime;
 
     time.tick();
-    RenderElement._restPool();
+    this._renderElementPool.resetPool();
+    this._spriteElementPool.resetPool();
 
     engineFeatureManager.callFeatureMethod(this, "preTick", [this, this._sceneManager._activeScene]);
 
@@ -228,8 +248,10 @@ export class Engine extends EventDispatcher {
       this._animate = null;
 
       this._sceneManager._activeScene.destroy();
-      this._sceneManager = null;
       this._resourceManager.gc();
+      // If engine destroy, callComponentDestory() maybe will not call anymore.
+      this._componentsManager.callComponentDestory();
+      this._sceneManager = null;
       this._resourceManager = null;
 
       this._canvas = null;
@@ -239,6 +261,7 @@ export class Engine extends EventDispatcher {
 
       // todo: delete
       (engineFeatureManager as any)._objects = [];
+      this.removeAllEventListeners();
     }
   }
 

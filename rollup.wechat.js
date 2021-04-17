@@ -8,9 +8,7 @@ import glslify from "rollup-plugin-glslify";
 import inject from "@rollup/plugin-inject";
 import replace from "@rollup/plugin-replace";
 
-const camelCase = require("camelcase");
-
-const { NODE_ENV } = process.env;
+const { BUILD_TYPE, NODE_ENV } = process.env;
 
 const pkgsRoot = path.join(__dirname, "packages");
 const pkgs = fs
@@ -22,11 +20,6 @@ const pkgs = fs
       pkgJson: require(path.resolve(location, "package.json"))
     };
   });
-
-// "oasisEngine" 、 "@oasisEngine/controls" ...
-function toGlobalName(pkgName) {
-  return camelCase(pkgName);
-}
 
 const extensions = [".js", ".jsx", ".ts", ".tsx"];
 
@@ -83,15 +76,26 @@ function remap(options) {
     name: 'remap',
     resolveId(id, importer) {
       if (id in options) {
-        return this.resolve(options[id], importer);
+        return options[id];
+        // return this.resolve(options[id], importer);
       }
       return null;
     },
+    load(id) {
+      if (id.startsWith('adapter:')) {
+        return `export * from "${module}";`
+      }
+      return null;
+    }
   }
 }
 
 const adapterRemap = {
-  './OrbitControl': './WechatOrbitControl'
+  './OrbitControl': 'adapter:OrbitControl',
+  './SystemInfo': 'adapter:SystemInfo',
+  '../SystemInfo': 'adapter:SystemInfo',
+  './BufferLoader': 'adapter:BufferLoader',
+  './WebGLRenderer': 'adapter:WebGLRenderer'
 }
 
 function config({ location, pkgJson }) {
@@ -105,9 +109,14 @@ function config({ location, pkgJson }) {
     })
   );
 
+  let map = [];
+  if (pkgJson.name !== '@oasis-engine/wechat-adapter') {
+    map = [remap(adapterRemap)]
+  }
+
   return {
     module: () => {
-      const plugins = [remap(adapterRemap), ...commonPlugins, inject(adapterVars)];
+      const plugins = [...map, ...commonPlugins, inject(adapterVars)];
       return {
         input,
         external,
@@ -130,7 +139,7 @@ async function makeRollupConfig({ type, compress = true, visualizer = true, ..._
 
 let promises = [];
 
-switch (NODE_ENV) {
+switch (BUILD_TYPE) {
   case "WECHAT":
     promises.push(...getWechat());
     break;

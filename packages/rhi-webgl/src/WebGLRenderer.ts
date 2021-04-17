@@ -5,21 +5,33 @@ import {
   ColorWriteMask,
   Engine,
   GLCapabilityType,
-  HardwareRenderer,
+  IHardwareRenderer,
+  IPlatformRenderColorTexture,
+  IPlatformRenderDepthTexture,
+  IPlatformRenderTarget,
+  IPlatformTexture2D,
+  IPlatformTextureCubeMap,
   Logger,
-  Material,
-  Primitive,
+  Mesh,
+  RenderColorTexture,
+  RenderDepthTexture,
   RenderTarget,
-  SubPrimitive,
-  TextureCubeFace
+  SubMesh,
+  Texture2D,
+  TextureCubeMap
 } from "@oasis-engine/core";
 import { IPlatformPrimitive } from "@oasis-engine/design";
 import { Vector4 } from "@oasis-engine/math";
 import { GLCapability } from "./GLCapability";
 import { GLExtensions } from "./GLExtensions";
 import { GLPrimitive } from "./GLPrimitive";
+import { GLRenderColorTexture } from "./GLRenderColorTexture";
+import { GLRenderDepthTexture } from "./GLRenderDepthTexture";
 import { GLRenderStates } from "./GLRenderStates";
-import { GLSpriteBatcher } from "./GLSpriteBatcher";
+import { GLRenderTarget } from "./GLRenderTarget";
+import { GLTexture } from "./GLTexture";
+import { GLTexture2D } from "./GLTexture2D";
+import { GLTextureCubeMap } from "./GLTextureCubeMap";
 import { WebGLExtension } from "./type";
 import { WebCanvas } from "./WebCanvas";
 
@@ -46,7 +58,7 @@ export interface WebGLRendererOptions extends WebGLContextAttributes {
 /**
  * WebGL renderer, including WebGL1.0 and WebGL2.0.
  */
-export class WebGLRenderer implements HardwareRenderer {
+export class WebGLRenderer implements IHardwareRenderer {
   _currentBind: any;
 
   private _options: WebGLRendererOptions;
@@ -57,11 +69,32 @@ export class WebGLRenderer implements HardwareRenderer {
   private _capability: GLCapability;
   private _isWebGL2: boolean;
 
-  private _activedTextureID: number;
-  private _activeTextures: WebGLTexture[] = new Array(32);
+  private _activedTextureID: number = -1; // WebGLRenderingContext.TEXTURE0;
+  private _activeTextures: GLTexture[] = new Array(32);
 
   get isWebGL2() {
     return this._isWebGL2;
+  }
+
+  /**
+   * GL Context
+   * @member {WebGLRenderingContext}
+   * @readonly
+   */
+  get gl() {
+    return this._gl;
+  }
+
+  get renderStates(): GLRenderStates {
+    return this._renderStates;
+  }
+
+  get capability(): GLCapability {
+    return this._capability;
+  }
+
+  get canIUseMoreJoints() {
+    return this.capability.canIUseMoreJoints;
   }
 
   constructor(options: WebGLRendererOptions = {}) {
@@ -84,15 +117,21 @@ export class WebGLRenderer implements HardwareRenderer {
         }
         this._isWebGL2 = true;
       }
+      this._isWebGL2 = true;
 
-      if (!gl) {
-        if (webGLMode == WebGLMode.Auto || webGLMode == WebGLMode.WebGL1) {
-          gl = <WebGLRenderingContext & WebGLExtension>webCanvas.getContext("webgl", option);
-          if (!gl && webCanvas instanceof HTMLCanvasElement) {
-            gl = <WebGLRenderingContext & WebGLExtension>webCanvas.getContext("experimental-webgl", option);
-          }
-          this._isWebGL2 = false;
+      // Prevent weird browsers to lie (such as safari!)
+      if (gl && !(<WebGL2RenderingContext>gl).deleteQuery) {
+        this._isWebGL2 = false;
+      }
+    }
+
+    if (!gl) {
+      if (webGLMode == WebGLMode.Auto || webGLMode == WebGLMode.WebGL1) {
+        gl = <WebGLRenderingContext & WebGLExtension>webCanvas.getContext("webgl", option);
+        if (!gl && webCanvas instanceof HTMLCanvasElement) {
+          gl = <WebGLRenderingContext & WebGLExtension>webCanvas.getContext("experimental-webgl", option);
         }
+        this._isWebGL2 = false;
       }
     }
 
@@ -112,20 +151,28 @@ export class WebGLRenderer implements HardwareRenderer {
     this._options = null;
   }
 
-  createPlatformPrimitive(primitive: Primitive): IPlatformPrimitive {
+  createPlatformPrimitive(primitive: Mesh): IPlatformPrimitive {
     return new GLPrimitive(this, primitive);
   }
 
-  get gl() {
-    return this._gl;
+  createPlatformTexture2D(texture2D: Texture2D): IPlatformTexture2D {
+    return new GLTexture2D(this, texture2D);
   }
 
-  get renderStates(): GLRenderStates {
-    return this._renderStates;
+  createPlatformTextureCubeMap(textureCube: TextureCubeMap): IPlatformTextureCubeMap {
+    return new GLTextureCubeMap(this, textureCube);
   }
 
-  get capability(): GLCapability {
-    return this._capability;
+  createPlatformRenderColorTexture(texture: RenderColorTexture): IPlatformRenderColorTexture {
+    return new GLRenderColorTexture(this, texture);
+  }
+
+  createPlatformRenderDepthTexture(texture: RenderDepthTexture): IPlatformRenderDepthTexture {
+    return new GLRenderDepthTexture(this, texture);
+  }
+
+  createPlatformRenderTarget(target: RenderTarget): IPlatformRenderTarget {
+    return new GLRenderTarget(this, target);
   }
 
   requireExtension(ext) {
@@ -138,10 +185,6 @@ export class WebGLRenderer implements HardwareRenderer {
 
   canIUseCompressedTextureInternalFormat(type: number) {
     return this.capability.canIUseCompressedTextureInternalFormat(type);
-  }
-
-  public get canIUseMoreJoints() {
-    return this.capability.canIUseMoreJoints;
   }
 
   viewport(x, y, width, height) {
@@ -201,10 +244,10 @@ export class WebGLRenderer implements HardwareRenderer {
       stencilState.writeMask = 0xff;
     }
 
-    gl.clear(clearFlag);
+    clearFlag && gl.clear(clearFlag);
   }
 
-  drawPrimitive(primitive: Primitive, subPrimitive: SubPrimitive, shaderProgram: any) {
+  drawPrimitive(primitive: Mesh, subPrimitive: SubMesh, shaderProgram: any) {
     // todo: VAO not support morph animation
     if (primitive) {
       //@ts-ignore
@@ -214,24 +257,11 @@ export class WebGLRenderer implements HardwareRenderer {
     }
   }
 
-  drawSprite(material, positionQuad, uvRect, tintColor, texture, renderMode, camera: Camera) {
-    if (!this._spriteBatcher) {
-      this._spriteBatcher = new GLSpriteBatcher(this);
-    }
-
-    this._spriteBatcher.drawSprite(material, positionQuad, uvRect, tintColor, texture, renderMode, camera);
-  }
-
-  flushSprite(engine: Engine, material: Material) {
-    if (this._spriteBatcher) {
-      this._spriteBatcher.flush(engine, material);
-    }
-  }
-
   activeRenderTarget(renderTarget: RenderTarget, camera: Camera) {
     const gl = this._gl;
     if (renderTarget) {
-      renderTarget._activeRenderTarget();
+      /** @ts-ignore */
+      (renderTarget._platformRenderTarget as GLRenderTarget)?._activeRenderTarget();
       const { width, height } = renderTarget;
       gl.viewport(0.0, 0.0, width, height);
     } else {
@@ -240,21 +270,6 @@ export class WebGLRenderer implements HardwareRenderer {
       const width = gl.drawingBufferWidth;
       const height = gl.drawingBufferHeight;
       this.viewport(viewport.x * width, viewport.y * height, viewport.z * width, viewport.w * height);
-    }
-  }
-
-  blitRenderTarget(renderTarget: RenderTarget) {
-    if (renderTarget) {
-      if (renderTarget._MSAAFrameBuffer) {
-        renderTarget._blitRenderTarget();
-        return;
-      }
-    }
-  }
-
-  setRenderTargetFace(renderTarget: RenderTarget, cubeFace: TextureCubeFace) {
-    if (renderTarget) {
-      renderTarget._setRenderTargetFace(cubeFace);
     }
   }
 
@@ -267,11 +282,11 @@ export class WebGLRenderer implements HardwareRenderer {
     }
   }
 
-  bindTexture(target: number, texture: WebGLTexture): void {
-    const gl = this._gl;
-    if (this._activeTextures[this._activedTextureID - gl.TEXTURE0] !== texture) {
-      gl.bindTexture(target, texture);
-      this._activeTextures[this._activedTextureID - gl.TEXTURE0] = texture;
+  bindTexture(texture: GLTexture): void {
+    const index = this._activedTextureID - this._gl.TEXTURE0;
+    if (this._activeTextures[index] !== texture) {
+      this._gl.bindTexture(texture._target, texture._glTexture);
+      this._activeTextures[index] = texture;
     }
   }
 }
