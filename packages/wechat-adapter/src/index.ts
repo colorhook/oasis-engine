@@ -1,9 +1,6 @@
 export { SystemInfo } from './SystemInfo';
-import "./BufferLoader";
 export { OrbitControl } from './OrbitControl';
-export { WebGLRenderer } from './WebGLRenderer';
 
-export let devicePixelRatio = 1;
 export let WebGLRenderingContext = undefined;
 export let WebGL2RenderingContext = undefined;
 export let innerWidth = 0;
@@ -22,21 +19,12 @@ try {
   platform = res.platform;
 } catch (err) {}
 
-
-export function base64ToArrayBuffer(base64) {
-  return wx.base64ToArrayBuffer(base64)
-}
-
-export function arrayBufferToBase64(arrayBuffer) {
-  return wx.arrayBufferToBase64(arrayBuffer)
-}
-
 export const performance = Date;
 
 
 let _canvas = null;
 
-export function initCanvas(canvas, gl) {
+export function __setGlobalCanvas(canvas, gl) {
   _canvas = canvas;
   WebGLRenderingContext = WebGL2RenderingContext = gl;
 }
@@ -61,11 +49,8 @@ export function request(url, options) {
 }
 
 export const window = {
-  initCanvas,
   WebGLRenderingContext,
   WebGL2RenderingContext,
-  base64ToArrayBuffer,
-  arrayBufferToBase64,
   platform,
   innerWidth,
   innerHeight,
